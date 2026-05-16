@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JARVIS — Stark Industries</title>
+    <meta name="description" content="JARVIS Autonomous AI Assistant — Heads-Up Display">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ cache_bust }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://unpkg.com/three@0.128.0/examples/js/renderers/CSS2DRenderer.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;600&family=JetBrains+Mono:wght@300;400;500&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+    <!-- Atmospheric Layers -->
+    <div class="scanline"></div>
+    <div class="vignette"></div>
+    <div class="corner tl"></div>
+    <div class="corner tr"></div>
+    <div class="corner bl"></div>
+    <div class="corner br"></div>
+
+    <div class="hud-container">
+
+        <!-- ===== HEADER ===== -->
+        <header class="hud-header">
+            <div class="header-left">
+                <div class="status-indicator">
+                    <span class="status-dot"></span>
+                    <span id="status-text">ONLINE</span>
+                </div>
+                <span class="jarvis-title">JARVIS</span>
+            </div>
+
+            <div class="header-center">
+                <span id="neural-state" class="neural-state-label">NEURAL LINK ESTABLISHED</span>
+            </div>
+
+            <div class="header-right">
+                <div class="clock-display">
+                    <span id="live-time">00:00:00</span><span id="live-millis" class="clock-millis">.000</span>
+                </div>
+                <div class="header-meta">
+                    <span>{{ date_str }}</span> &middot;
+                    <span>UPTIME <span id="uptime-val">00:00:00</span></span>
+                </div>
+            </div>
+        </header>
+
+        <!-- ===== MAIN GRID ===== -->
+        <main class="hud-main">
+
+            <!-- LEFT SIDEBAR -->
+            <section class="left-panels">
+
+                <!-- System Metrics -->
+                <div class="glass-card">
+                    <div class="card-header">SYSTEM_METRICS</div>
+                    <div class="metrics-grid">
+                        <div class="metric-row">
+                            <div class="metric-label"><span>CPU</span><span id="cpu-val" class="metric-value">0%</span></div>
+                            <div class="metric-bar"><div id="cpu-bar" class="fill"></div></div>
+                        </div>
+                        <div class="metric-row">
+                            <div class="metric-label"><span>MEMORY</span><span id="mem-val" class="metric-value">0%</span></div>
+                            <div class="metric-bar"><div id="mem-bar" class="fill"></div></div>
+                        </div>
+                        <div class="metric-row">
+                            <div class="metric-label"><span>BATTERY</span><span id="batt-val" class="metric-value">--</span></div>
+                            <div class="metric-bar"><div id="batt-bar" class="fill battery"></div></div>
+                        </div>
+                        <div class="metric-row">
+                            <div class="metric-label"><span>LATENCY</span><span id="latency-val" class="metric-value">--</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Neural Bridge Selector -->
+                <div class="glass-card">
+                    <div class="card-header">NEURAL_BRIDGE</div>
+                    <div class="bridge-control">
+                        <select id="brain-selector" class="hud-select">
+                            <option value="auto" selected>AUTO // FAILOVER</option>
+                            <option value="gemini">GEMINI-2.5-FLASH-LITE</option>
+                            <option value="groq">GROQ // LLAMA-3.2-VISION</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Active Subsystems -->
+                <div class="glass-card">
+                    <div class="card-header">SUBSYSTEMS</div>
+                    <ul id="active-agents-list" class="agents-list">
+                        <li data-agent="planner" class="active"><span class="status-dot online"></span> PLANNER</li>
+                        <li data-agent="researcher"><span class="status-dot"></span> RESEARCHER</li>
+                        <li data-agent="coder"><span class="status-dot"></span> CODER</li>
+                        <li data-agent="executor"><span class="status-dot online"></span> EXECUTOR</li>
+                        <li data-agent="observer"><span class="status-dot online"></span> OBSERVER</li>
+                        <li data-agent="gesture"><span id="gesture-dot" class="status-dot"></span> GESTURE</li>
+                        <li data-agent="safety"><span class="status-dot online"></span> SAFETY</li>
+                    </ul>
+                </div>
+
+                <!-- Visual Awareness -->
+                <div class="glass-card observer-panel">
+                    <div class="card-header">VISUAL_AWARENESS</div>
+                    <div class="scan-container" id="drop-zone">
+                        <div class="scanner"></div>
+                        <img id="last-scan-img" src="" alt="" class="scan-img">
+                        <div class="drop-overlay" id="drop-overlay">
+                            <span class="drop-icon">⬇</span>
+                            <span class="drop-label">DROP IMAGE TO ANALYSE</span>
+                        </div>
+                    </div>
+                    <div id="observer-context" class="observer-text">
+                        Awaiting visual data... Drop an image above to analyse it.
+                    </div>
+                </div>
+
+
+                <!-- Live Data Stream -->
+                <div class="glass-card">
+                    <div class="card-header">DATA_STREAM</div>
+                    <div id="data-stream" class="data-stream">
+                        Initializing telemetry feed...
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- CENTER: NEURAL CORE -->
+            <section class="center-panel">
+                <canvas id="reactor-particles"></canvas>
+                <div class="arc-reactor">
+                    <svg viewBox="0 0 200 200" class="reactor-svg">
+                        <!-- Data Ring (outermost, large) -->
+                        <circle cx="100" cy="100" r="96" class="ring data-ring" />
+
+                        <!-- Outer Rings -->
+                        <circle cx="100" cy="100" r="88" class="ring outer" />
+                        <circle cx="100" cy="100" r="88" class="ring outer-dash" stroke-dasharray="8, 16" />
+
+                        <!-- Middle Ring -->
+                        <circle cx="100" cy="100" r="68" class="ring middle" stroke-dasharray="3, 8" />
+
+                        <!-- Inner Ring -->
+                        <circle cx="100" cy="100" r="48" class="ring inner" stroke-dasharray="30, 8" />
+
+                        <!-- Hex Frame -->
+                        <path d="M100 78 L119 89 L119 111 L100 122 L81 111 L81 89 Z" class="hex-frame" />
+
+                        <!-- Core -->
+                        <circle cx="100" cy="100" r="28" class="core-circle" />
+
+                        <!-- Scanning Beam -->
+                        <line x1="100" y1="100" x2="100" y2="8" stroke="var(--state-accent)" stroke-width="0.5" opacity="0.3" class="scan-beam" />
+                    </svg>
+                    <div id="core-glow" class="core-glow"></div>
+                </div>
+
+                <div class="core-status-text">
+                    <span id="core-state-label" class="state-label">STANDBY</span>
+                    <span id="core-state-sub" class="state-sub">GEMINI-2.5-FLASH-LITE // READY</span>
+                </div>
+            </section>
+
+            <!-- RIGHT: TRANSCRIPT -->
+            <section class="transcript-section">
+
+                <div class="glass-panel main-log">
+                    <div class="panel-header-sub">SYSTEM_TRANSCRIPT</div>
+
+                    <!-- Thinking Indicator -->
+                    <div id="thinking-indicator" class="thinking hidden">
+                        PROCESSING NEURAL RESPONSE...
+                    </div>
+
+                    <div id="transcript" class="transcript-feed">
+                        <p class="system-msg"><span class="log-tag">SYS//</span> JARVIS interface online. All systems nominal.</p>
+                    </div>
+
+                    <!-- Input -->
+                    <div class="input-area">
+                        <div class="input-wrapper">
+                            <input id="user-input" placeholder="> awaiting command..." autocomplete="off">
+                            <button id="send-btn">EXEC</button>
+                        </div>
+                    </div>
+                </div>
+
+            </section>
+
+        </main>
+
+    </div>
+
+    <!-- CAMERA PREVIEW OVERLAY -->
+    <div id="camera-overlay" class="camera-overlay hidden">
+        <div class="camera-header">
+            <span class="camera-live-badge">● LIVE</span>
+            <span class="camera-title">CAMERA_FEED</span>
+            <button id="camera-cancel" class="visual-close-btn">CANCEL [ESC]</button>
+        </div>
+        <div class="camera-feed-container">
+            <video id="camera-video" autoplay playsinline muted></video>
+            <canvas id="camera-canvas"></canvas>
+            <div class="camera-crosshair"></div>
+        </div>
+        <div class="camera-toolbar">
+            <button id="camera-capture-btn" class="camera-capture-btn">CAPTURE</button>
+            <span id="camera-status" class="camera-status">Position your camera and click CAPTURE when ready</span>
+        </div>
+    </div>
+
+    <!-- VISUAL GENERATION OVERLAY -->
+    <div id="visual-overlay" class="visual-overlay hidden">
+        <div class="visual-header">
+            <span id="visual-title" class="visual-title">VISUAL_OUTPUT</span>
+            <button id="visual-close" class="visual-close-btn">CLOSE [ESC]</button>
+        </div>
+        <div id="visual-content" class="visual-content"></div>
+        <div class="visual-toolbar">
+            <button id="visual-zoom-in">ZOOM +</button>
+            <button id="visual-zoom-out">ZOOM -</button>
+            <button id="visual-reset">RESET</button>
+            <button id="visual-save">SAVE</button>
+            <span id="visual-status" class="visual-status"></span>
+        </div>
+    </div>
+
+    <!-- AUTH OVERLAY — PIN + FACE VERIFICATION -->
+    <div id="auth-overlay" class="auth-overlay">
+        <div class="auth-container">
+            <div class="auth-reactor-glow"></div>
+            <div class="auth-logo">
+                <svg viewBox="0 0 100 100" class="auth-reactor-svg">
+                    <circle cx="50" cy="50" r="45" class="ring outer" />
+                    <circle cx="50" cy="50" r="35" class="ring middle" stroke-dasharray="3, 8" />
+                    <circle cx="50" cy="50" r="20" class="core-circle" />
+                </svg>
+            </div>
+            <h1 class="auth-title">J.A.R.V.I.S.</h1>
+            <p class="auth-subtitle">STARK INDUSTRIES — SECURE ACCESS</p>
+
+            <!-- STAGE 1: PIN -->
+            <div id="auth-pin-stage" class="auth-stage">
+                <label class="auth-label">ENTER ACCESS CODE</label>
+                <div class="auth-pin-row">
+                    <input id="auth-pin-input" type="password" maxlength="8" placeholder="••••" autocomplete="off" class="auth-pin-input">
+                    <button id="auth-pin-submit" class="auth-btn">VERIFY</button>
+                </div>
+                <p id="auth-pin-error" class="auth-error hidden">ACCESS DENIED — INVALID CODE</p>
+            </div>
+
+            <!-- STAGE 2: FACE -->
+            <div id="auth-face-stage" class="auth-stage hidden">
+                <label class="auth-label">BIOMETRIC VERIFICATION</label>
+                <div class="auth-face-container">
+                    <video id="auth-face-video" autoplay playsinline muted></video>
+                    <canvas id="auth-face-canvas"></canvas>
+                    <div class="auth-face-frame"></div>
+                    <div class="auth-scan-line"></div>
+                </div>
+                <p id="auth-face-status" class="auth-face-status">Initializing facial scanner...</p>
+                <button id="auth-face-retry" class="auth-btn hidden">SCAN AGAIN</button>
+            </div>
+
+            <!-- STAGE 3: SUCCESS -->
+            <div id="auth-success-stage" class="auth-stage hidden">
+                <p class="auth-welcome">IDENTITY CONFIRMED</p>
+                <p id="auth-welcome-name" class="auth-welcome-name"></p>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}?v={{ cache_bust }}"></script>
+</body>
+
+</html>
