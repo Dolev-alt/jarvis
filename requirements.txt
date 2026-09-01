@@ -1,0 +1,28 @@
+# --- AI / LLM providers ---
+google-genai
+groq
+
+# --- Voice: STT / TTS ---
+SpeechRecognition
+edge-tts
+vosk
+pyaudio
+
+# --- Vision / Image ---
+opencv-python
+Pillow
+pytesseract
+numpy
+
+# --- Automation / OS control ---
+pyautogui
+psutil
+watchdog
+
+# --- Web / networking ---
+requests
+python-dotenv
+
+# --- Optional (used with graceful fallback if missing) ---
+googletrans==4.0.0-rc1
+scipy
